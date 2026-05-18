@@ -1,6 +1,6 @@
 # rokid-desktop
 
-Stream the desktop of a Linux PC to **Rokid AR glasses** in real time via WebRTC.
+Stream the desktop of a Linux PC to **Rokid AR glasses** in real time via WebRTC, with camera feedback from the glasses back to the PC for gesture control.
 
 ![Platform](https://img.shields.io/badge/platform-Linux%20%7C%20Android-blue)
 ![Android API](https://img.shields.io/badge/Android%20API-32%20(Android%2012)-green)
@@ -17,8 +17,8 @@ Stream the desktop of a Linux PC to **Rokid AR glasses** in real time via WebRTC
 - [How it works](#how-it-works)
 - [Requirements](#requirements)
 - [Quick Start](#quick-start)
-- [Headless / No-Monitor Setup](#headless--no-monitor-setup)
-- [Remote Access via VPN](#remote-access-via-vpn)
+- [Headless / Virtual Display Setup](#headless--virtual-display-setup)
+- [Network Requirements](#network-requirements)
 - [Project Structure](#project-structure)
 - [Build the APK](#build-the-apk)
 - [Auto-start on Boot](#auto-start-on-boot-linux-systemd)
@@ -33,16 +33,21 @@ Stream the desktop of a Linux PC to **Rokid AR glasses** in real time via WebRTC
 
 ## How it works
 
+Bidirectional system: the NUC streams its desktop to the glasses, and the glasses stream their camera back to the NUC for gesture recognition.
+
 ```
-Linux PC (NUC)                        Rokid Glasses (Android 12)
-──────────────────────────────────    ──────────────────────────
-ffmpeg x11grab → RTSP :8554       →   mediamtx WHEP :8889
-mediamtx → WebRTC + HLS           →   APK WebView (fullscreen)
+Linux PC (NUC)                                Rokid Glasses (Android 12)
+──────────────────────────────────────────    ──────────────────────────────
+Xvfb :1 → ffmpeg x11grab → RTSP :8554    →   mediamtx WHEP :8889
+mediamtx → WebRTC + HLS                   →   APK WebView (fullscreen)
+
+                                           ←   CameraService → TCP :8082
+NUC receives JPEG frames (gesture input)  ←   Camera2 640×480 @ ~30fps
 ```
 
-The APK opens a fullscreen **WebView** that loads mediamtx's built-in JavaScript WebRTC player. No native WebRTC SDK needed — the browser engine handles everything.
+The APK opens a fullscreen **WebView** that loads mediamtx's built-in WebRTC player. No native WebRTC SDK needed.
 
-The Rokid display is **additive** (black pixels = transparent). Setting the desktop background to pure black makes the stream appear as an AR overlay on the real world.
+The Rokid display is **additive** (dark pixels = transparent). The desktop background is set to `grey20` — dark enough to be nearly invisible as an AR overlay.
 
 ---
 
@@ -51,16 +56,20 @@ The Rokid display is **additive** (black pixels = transparent). Setting the desk
 ### Linux PC (server)
 - `ffmpeg` with x11grab support (`apt install ffmpeg`)
 - `mediamtx` v1.18+ — [releases](https://github.com/bluenviron/mediamtx/releases)
-- X11 display (GNOME/KDE/etc.) — see [Headless setup](#headless--no-monitor-setup) if running without monitor
+- `Xvfb` for the virtual display (`apt install xvfb`)
+- `xsetroot` (`apt install x11-utils`)
+- systemd service `rokid-session` managing the virtual display (see [Headless setup](#headless--virtual-display-setup))
+- A TCP listener on `:8082` to receive camera frames from the glasses
 
 ### Rokid Glasses
 - USB debugging enabled (Settings → Developer options)
 - `adb` installed on the control PC
-- WiFi on same LAN as the Linux PC (or reachable via VPN)
+- WiFi on same LAN as the Linux PC
+- Camera permission granted to the app
 
 ### Build dependencies (APK only)
 - Android Studio or JDK 21 + Android SDK
-- Gradle (wrapper included)
+- Gradle wrapper included (`gradlew.bat` on Windows)
 
 ---
 
@@ -77,6 +86,8 @@ Stream will be available at:
 - **WebRTC (WHEP)**: `http://<NUC-IP>:8889/desktop/`
 - **HLS**: `http://<NUC-IP>:8888/desktop/index.m3u8`
 
+The script uses `DISPLAY :1` (Xvfb). See [Headless setup](#headless--virtual-display-setup) for details.
+
 ### 2. Install APK on glasses
 
 ```bash
@@ -86,6 +97,8 @@ adb install -r apk/app/build/outputs/apk/debug/app-debug.apk
 ### 3. Launch from glasses
 
 Open **Rokid Desktop** from the YodaOS launcher. The app auto-connects to the saved IP after a 3-second countdown. Tap **Cancel** to change the IP manually.
+
+On connect, the app also starts `CameraService` in the background — the glasses camera begins streaming JPEG frames to the NUC at `192.168.1.146:8082`.
 
 ### 4. Launch via ADB (Windows — BAT scripts included)
 
@@ -105,29 +118,25 @@ adb shell am start -n com.rokid.os.sprite.launcher/.main.SpriteMainActivity
 
 ---
 
-## Headless / No-Monitor Setup
+## Headless / Virtual Display Setup
 
-Running the NUC **without a physical monitor** (common for always-on setups) requires a valid X11 session and XAUTH cookie. The included `start.sh` handles this automatically using the GDM session:
+The project uses **Xvfb** on `DISPLAY :1` — a fully virtual display, no physical monitor needed. This is managed by a systemd service called `rokid-session`.
+
+`start.sh` checks if `:1` is available and starts `rokid-session` if not:
 
 ```bash
-# start.sh uses the GDM Xauthority cookie
-export XAUTHORITY=/run/user/1000/gdm/Xauthority
-export DISPLAY=:0
-
-# Verify X11 is accessible before starting
-xdpyinfo -display :0 >/dev/null 2>&1 || { echo "No X11 display"; exit 1; }
+if ! DISPLAY=:1 xdpyinfo >/dev/null 2>&1; then
+    systemctl start rokid-session
+    sleep 3
+fi
 ```
 
-**Requirements for headless:**
-- A user must be logged in (GNOME session active) — GDM auto-login recommended
-- `/run/user/1000/gdm/Xauthority` must exist (replace `1000` with your UID if different)
-- Minimum resolution: 1024×768 (set in GNOME display settings or via `xrandr`)
-
-**Set a black background on session start:**
+The desktop background is set to dark grey on start:
 ```bash
-xsetroot -solid black
+DISPLAY=:1 xsetroot -solid grey20
 ```
-This makes the stream invisible on the Rokid overlay instead of showing a bright background.
+
+> This approach is simpler and more reliable than using the GDM session (:0) — no XAUTH cookies, no dependency on a logged-in user.
 
 ---
 
@@ -137,6 +146,8 @@ The stream works **exclusively over local WiFi/LAN**. The glasses (Android WebVi
 
 > Both the NUC and the Rokid glasses must be on the same WiFi network.
 
+The camera back-channel also uses direct TCP — the glasses push frames to the hardcoded NUC address (`192.168.1.146:8082`). Update `CameraService.NUC_HOST` if your NUC IP differs.
+
 ---
 
 ## Project Structure
@@ -144,17 +155,20 @@ The stream works **exclusively over local WiFi/LAN**. The glasses (Android WebVi
 ```
 rokid-desktop/
 ├── server/
-│   ├── start.sh               # Starts mediamtx + ffmpeg capture
+│   ├── start.sh               # Starts mediamtx + ffmpeg (DISPLAY :1, 1280×720, 25fps)
 │   └── mediamtx.yml           # mediamtx config (WebRTC :8889, HLS :8888, RTSP :8554)
 ├── apk/
+│   ├── gradle.properties      # JDK 21 path + AndroidX config
+│   ├── gradlew.bat            # Windows Gradle wrapper
 │   └── app/src/main/
 │       ├── java/com/rokid/desktop/
 │       │   ├── MainActivity.java      # IP selector with 3s auto-connect countdown
-│       │   └── StreamActivity.java    # Fullscreen WebView WHEP player
+│       │   ├── StreamActivity.java    # Fullscreen WebView + starts CameraService
+│       │   └── CameraService.java     # Camera2 → JPEG → TCP :8082 to NUC
 │       ├── res/layout/
 │       │   ├── activity_main.xml
 │       │   └── activity_stream.xml
-│       └── AndroidManifest.xml
+│       └── AndroidManifest.xml        # INTERNET, CAMERA, FOREGROUND_SERVICE_CAMERA
 ├── hoja-de-ruta.md            # Development log and pending tasks
 └── README.md
 ```
@@ -163,12 +177,10 @@ rokid-desktop/
 
 ## Build the APK
 
-Requires Android SDK or Android Studio with JDK 21:
-
+On Linux/Mac:
 ```bash
 cd apk/
 ./gradlew assembleDebug
-# Output: app/build/outputs/apk/debug/app-debug.apk
 ```
 
 On Windows:
@@ -176,8 +188,9 @@ On Windows:
 cd apk
 gradlew.bat assembleDebug
 ```
+Output: `app/build/outputs/apk/debug/app-debug.apk`
 
-> JDK 21 path must be set in `gradle.properties` if not using Android Studio's bundled JDK.
+> JDK 21 path is set in `gradle.properties` pointing to Android Studio's bundled JDR. Adjust if using a standalone JDK.
 
 ---
 
@@ -193,13 +206,10 @@ Example service file:
 ```ini
 [Unit]
 Description=Rokid Desktop Stream
-After=network-online.target graphical-session.target
+After=network-online.target rokid-session.target
 
 [Service]
 User=root
-Environment=DISPLAY=:0
-Environment=XAUTHORITY=/run/user/1000/gdm/Xauthority
-ExecStartPre=/bin/sleep 5
 ExecStart=/home/rokid/desktop-server/start.sh
 Restart=on-failure
 RestartSec=10
@@ -214,15 +224,15 @@ WantedBy=multi-user.target
 
 | Problem | Cause | Fix |
 |---------|-------|-----|
-| `No X11 display` error | XAUTH cookie missing or wrong path | Check `/run/user/1000/gdm/Xauthority` exists; verify UID with `id` |
-| Black screen on glasses (no video) | ffmpeg not capturing | Run `start.sh` manually and check stderr for `x11grab` errors |
-| App connects but freezes | ICE negotiation failure | Both devices must be on same LAN or connected via VPN |
+| `Display :1 no disponible` | Xvfb / rokid-session not running | `systemctl start rokid-session` then re-run `start.sh` |
+| Black screen on glasses (no video) | ffmpeg not capturing | Check `server/stream.log` for x11grab errors |
+| App connects but freezes | ICE negotiation failure | Both devices must be on same LAN |
+| Camera permission denied | Not granted on first run | Open app settings → grant Camera manually |
+| No frames received on NUC :8082 | Wrong NUC IP in CameraService | Update `CameraService.NUC_HOST` to match NUC LAN IP |
 | HTTP connection refused on Android | Cleartext traffic blocked | Verify `android:usesCleartextTraffic="true"` in AndroidManifest |
 | ADB `am start` fails — activity not found | `exported` flag missing | Verify `android:exported="true"` on `StreamActivity` |
 | Video rotated 90° | Wrong screen orientation | `android:screenOrientation="portrait"` in manifest |
-| WiFi disabled on glasses | YodaOS WiFi sleep | Run `adb shell svc wifi enable` before launching app |
-| Low resolution headless | GNOME virtual display default | Set display resolution with `xrandr --newmode` or GNOME settings |
-| WebRTC ICE fails (native SDK) | Rokid SDK incompatibility | Use WebView + mediamtx JS player (already implemented) |
+| WiFi disabled on glasses | YodaOS WiFi sleep | Run `adb shell svc wifi enable` before launch |
 
 ---
 
@@ -230,42 +240,42 @@ WantedBy=multi-user.target
 
 - **Latency**: ~200–500ms over LAN depending on hardware. Not suitable for video playback or fast-paced content.
 - **Audio**: Not streamed — display only.
-- **Resolution**: Rokid Max native resolution is 1920×1080 per eye; desktop resolution should match for best clarity.
-- **Battery**: Continuous WebRTC reception drains glasses battery faster than normal use.
-- **API deprecation**: `WindowInsetsController` usage in `StreamActivity` targets a deprecated API path — planned update in roadmap.
+- **NUC IP hardcoded**: `CameraService.NUC_HOST` is a static constant — requires recompile if the NUC IP changes.
+- **Battery**: Continuous WebRTC reception + camera streaming drains glasses battery faster than normal use.
+- **API deprecation**: `hideSystemUI()` in `StreamActivity` uses deprecated `SYSTEM_UI_FLAG_*` flags — planned migration to `WindowInsetsController`.
 
 ---
 
 > **Warning — Heat & Resource Usage**
 >
-> Continuous WebRTC streaming puts sustained load on the glasses SoC. The Rokid Max / Air 2 Pro will get noticeably warm after 15–20 minutes of use. To reduce heat and extend safe usage time, **lower the capture framerate** in `server/start.sh`:
+> Continuous WebRTC streaming + camera capture puts sustained load on the glasses SoC. The Rokid Max / Air 2 Pro will get noticeably warm after 15–20 minutes of use. To reduce heat and extend safe usage time, **lower the capture framerate** in `server/start.sh`:
 >
 > ```bash
-> # Default (may cause overheating on long sessions)
-> -framerate 30
+> # Current setting
+> -r 25
 >
-> # Recommended for extended use
-> -framerate 15
+> # Recommended for extended sessions
+> -r 15
 > ```
 >
-> A lower framerate also reduces CPU usage on the Linux server and improves stream stability on weaker networks.
+> A lower framerate also reduces CPU usage on the NUC and improves stream stability on congested WiFi.
 
 ---
 
 ## Roadmap
 
-- [ ] Systemd service with automatic XAUTH discovery (no hardcoded UID)
+- [ ] Systemd `rokid-session.service` — publish service file in repo
+- [ ] Dynamic NUC IP discovery (remove hardcoded `192.168.1.146`)
 - [ ] Audio streaming via WebRTC (separate audio track in mediamtx)
 - [ ] Configurable resolution/bitrate from the APK settings screen
-- [ ] Replace deprecated `WindowInsetsController` with current insets API
-- [ ] Gesture passthrough — tap on glasses triggers mouse click on desktop
-- [ ] Multi-source selection (switch between desktop streams from multiple PCs)
+- [ ] Replace deprecated `SYSTEM_UI_FLAG_*` with `WindowInsetsController`
+- [ ] Gesture passthrough — map recognized gestures to mouse/keyboard events on the NUC desktop
 
 ---
 
 ## Related Projects
 
-- [rokid-gestos](https://github.com/PowerKeysolutions/rokid-gestos) — Control the Linux desktop with hand gestures captured by the glasses camera (MediaPipe → xdotool)
+- [rokid-gestos](https://github.com/PowerKeysolutions/rokid-gestos) — Processes the camera stream received on `:8082` using MediaPipe Hands to detect gestures and translate them to mouse/keyboard events via xdotool.
 
 ---
 
@@ -275,7 +285,7 @@ Issues and PRs are welcome. For significant changes, open an issue first to disc
 
 **Dev environment:**
 - Android Studio Hedgehog+ for the APK
-- Any Linux box with ffmpeg + mediamtx for server-side testing
+- Any Linux box with ffmpeg + Xvfb + mediamtx for server-side testing
 - Rokid glasses with USB debugging enabled for device testing
 
 ---
