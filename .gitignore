@@ -1,0 +1,18 @@
+# Build outputs
+apk/app/build/
+apk/.gradle/
+apk/local.properties
+*.apk
+
+# IDE
+.idea/
+*.iml
+*.iws
+
+# Logs
+server/stream.log
+server/mediamtx
+
+# OS
+.DS_Store
+Thumbs.db

@@ -1,0 +1,27 @@
+logLevel: info
+logDestinations: [stdout]
+
+# RTSP: ffmpeg publica aquí
+rtsp: yes
+rtspAddress: :8554
+
+# WebRTC WHEP + player web: APK consume aquí
+webrtc: yes
+webrtcAddress: :8889
+webrtcLocalUDPAddress: :8189
+
+# HLS fallback: baja latencia
+hls: yes
+hlsAddress: :8888
+hlsAlwaysRemux: yes
+hlsVariant: lowLatency
+hlsSegmentCount: 7
+hlsSegmentDuration: 1s
+hlsPartDuration: 200ms
+
+rtmp: no
+srt: no
+
+paths:
+  desktop:
+    {}

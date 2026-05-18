@@ -1,0 +1,71 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:gravity="center"
+    android:padding="32dp"
+    android:background="#1a1a1a">
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Rokid Desktop"
+        android:textColor="#ffffff"
+        android:textSize="24sp"
+        android:layout_marginBottom="40dp" />
+
+    <TextView
+        android:id="@+id/status_text"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:textColor="#00cc66"
+        android:textSize="16sp"
+        android:gravity="center"
+        android:layout_marginBottom="24dp"
+        android:visibility="gone" />
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="IP del NUC"
+        android:textColor="#aaaaaa"
+        android:textSize="12sp"
+        android:layout_marginBottom="8dp" />
+
+    <EditText
+        android:id="@+id/ip_input"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:inputType="text"
+        android:textColor="#ffffff"
+        android:textColorHint="#666666"
+        android:hint="192.168.1.146"
+        android:background="#2d2d2d"
+        android:padding="14dp"
+        android:textSize="16sp"
+        android:layout_marginBottom="24dp" />
+
+    <Button
+        android:id="@+id/connect_btn"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="CONECTAR"
+        android:backgroundTint="#00cc66"
+        android:textColor="#ffffff"
+        android:textSize="14sp"
+        android:padding="16dp"
+        android:layout_marginBottom="16dp" />
+
+    <Button
+        android:id="@+id/cancel_btn"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="CANCELAR"
+        android:backgroundTint="#cc3333"
+        android:textColor="#ffffff"
+        android:textSize="14sp"
+        android:padding="16dp"
+        android:visibility="gone" />
+
+</LinearLayout>
