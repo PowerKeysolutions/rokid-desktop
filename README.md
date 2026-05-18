@@ -242,6 +242,22 @@ WantedBy=multi-user.target
 
 ---
 
+> **Warning — Heat & Resource Usage**
+>
+> Continuous WebRTC streaming puts sustained load on the glasses SoC. The Rokid Max / Air 2 Pro will get noticeably warm after 15–20 minutes of use. To reduce heat and extend safe usage time, **lower the capture framerate** in `server/start.sh`:
+>
+> ```bash
+> # Default (may cause overheating on long sessions)
+> -framerate 30
+>
+> # Recommended for extended use
+> -framerate 15
+> ```
+>
+> A lower framerate also reduces CPU usage on the Linux server and improves stream stability on weaker networks.
+
+---
+
 ## Roadmap
 
 - [ ] Systemd service with automatic XAUTH discovery (no hardcoded UID)
