@@ -13,6 +13,9 @@ apk/local.properties
 server/stream.log
 server/mediamtx
 
+# Internal dev logs (contain IPs and credentials — keep local only)
+hoja-de-ruta.md
+
 # OS
 .DS_Store
 Thumbs.db
