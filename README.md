@@ -131,17 +131,11 @@ This makes the stream invisible on the Rokid overlay instead of showing a bright
 
 ---
 
-## Remote Access via VPN
+## Network Requirements
 
-If the glasses and NUC are on different networks (e.g., NUC at office, glasses on mobile), you can use **Tailscale** or WireGuard:
+The stream works **exclusively over local WiFi/LAN**. The glasses (Android WebView) connect directly to the NUC's WebRTC endpoint — there is no VPN support unless Tailscale is installed on the glasses themselves (not tested on YodaOS).
 
-```bash
-# Replace LAN IP with Tailscale IP
-adb shell am start -n com.rokid.desktop/.StreamActivity \
-  --es stream_url "http://NUC-TAILSCALE-IP:8889/desktop/"
-```
-
-> Note: WebRTC over VPN may have higher latency. For best results use LAN.
+> Both the NUC and the Rokid glasses must be on the same WiFi network.
 
 ---
 
